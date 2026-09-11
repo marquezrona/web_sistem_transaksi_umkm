@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
+
+body {
+    margin: 0;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background: #FAF8F5;
+    color: #0C2340;
+}
+
+.font-display { font-family: 'Outfit', system-ui, sans-serif; letter-spacing: -0.02em; }
+.font-mono { font-family: 'JetBrains Mono', monospace; }
+
+@layer base {
+    :root {
+        --background: 40 33% 97%;
+        --foreground: 214 61% 15%;
+        --card: 0 0% 100%;
+        --card-foreground: 214 61% 15%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 214 61% 15%;
+        --primary: 210 82% 21%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 9 60% 41%;
+        --secondary-foreground: 0 0% 100%;
+        --muted: 40 20% 94%;
+        --muted-foreground: 215 15% 42%;
+        --accent: 42 100% 45%;
+        --accent-foreground: 214 61% 15%;
+        --destructive: 0 72% 51%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 42 23% 85%;
+        --input: 42 23% 88%;
+        --ring: 210 82% 21%;
+        --radius: 0.75rem;
+        --chart-1: 210 82% 30%;
+        --chart-2: 42 100% 50%;
+        --chart-3: 9 60% 45%;
+        --chart-4: 168 60% 35%;
+        --chart-5: 265 55% 45%;
+    }
+}
+
+@layer base {
+    * { @apply border-border; }
+    body { @apply bg-background text-foreground; }
+}
+
+/* Tenun Ikat top border accent */
+.tenun-border {
+    background-image: repeating-linear-gradient(
+        90deg,
+        #8B2626 0px, #8B2626 8px,
+        #E6A100 8px, #E6A100 16px,
+        #0A3663 16px, #0A3663 24px,
+        #E6A100 24px, #E6A100 32px
+    );
+    height: 6px;
+}
+
+/* NFC ripple */
+@keyframes ripple {
+    0% { transform: scale(0.8); opacity: 0.9; }
+    100% { transform: scale(2.4); opacity: 0; }
+}
+.nfc-ripple::before,
+.nfc-ripple::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 3px solid #7E22CE;
+    animation: ripple 1.8s infinite;
+}
+.nfc-ripple::after { animation-delay: 0.9s; }
+
+.qris-scan {
+    background: linear-gradient(180deg, transparent, rgba(30,64,175,0.15), transparent);
+    animation: scan 2.5s linear infinite;
+}
+@keyframes scan {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+}
+
+.pos-card:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -8px rgba(10,54,99,0.15); }
+.pos-card { transition: transform 200ms, box-shadow 200ms; }
+
+::selection { background: #E6A100; color: #0C2340; }
