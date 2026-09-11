@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Power, Store } from "lucide-react";
+import { Plus, Power, Store, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const rp = (n) => "Rp " + Number(n || 0).toLocaleString("id-ID");
@@ -34,32 +33,46 @@ export default function AdminUmkms() {
   };
 
   const toggle = async (id) => {
-    await api.patch(`/admin/umkms/${id}/toggle`);
-    load();
+    try {
+      await api.patch(`/admin/umkms/${id}/toggle`);
+      load();
+    } catch (err) { toast.error(err.response?.data?.detail || "Gagal mengubah status UMKM"); }
+  };
+
+  const remove = async (umkm) => {
+    if (!window.confirm(`Hapus UMKM ${umkm.store_name}? Data akun, produk, pelanggan, dan transaksi toko ini akan dihapus permanen.`)) return;
+    try {
+      await api.delete(`/admin/umkms/${umkm.id}`);
+      toast.success("UMKM berhasil dihapus");
+      load();
+    } catch (err) { toast.error(err.response?.data?.detail || "Gagal menghapus UMKM"); }
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="font-display text-3xl font-extrabold text-[#0C2340]">Daftar UMKM</h1>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="add-umkm-btn" className="bg-[#0A3663] hover:bg-[#0C2340] rounded-full">
-              <Plus className="w-4 h-4 mr-1.5" /> Tambah UMKM
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Tambah UMKM Baru</DialogTitle></DialogHeader>
+        <Button data-testid="add-umkm-btn" onClick={() => setOpen(true)} className="bg-[#0A3663] hover:bg-[#0C2340] rounded-full">
+          <Plus className="w-4 h-4 mr-1.5" /> Tambah UMKM
+        </Button>
+        {open && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-5 shadow-lg">
+              <h2 className="text-lg font-semibold text-slate-900">Tambah UMKM Baru</h2>
             <form onSubmit={create} className="space-y-3">
               <div><Label>Nama Toko</Label><Input required value={form.store_name} onChange={e => setForm({ ...form, store_name: e.target.value })} /></div>
               <div><Label>Email Login</Label><Input type="email" required value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
               <div><Label>Password</Label><Input type="password" required value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} /></div>
               <div><Label>Alamat</Label><Input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} /></div>
               <div><Label>Telepon</Label><Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} /></div>
-              <Button type="submit" className="w-full bg-[#0A3663]">Simpan</Button>
+              <div className="flex gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1">Batal</Button>
+                <Button type="submit" className="flex-1 bg-[#0A3663]">Simpan</Button>
+              </div>
             </form>
-          </DialogContent>
-        </Dialog>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -83,13 +96,19 @@ export default function AdminUmkms() {
                 <div className="text-[10px] font-bold uppercase text-slate-500">Saldo</div>
                 <div className="font-display font-bold text-[#0A3663]">{rp(u.balance)}</div>
               </div>
-              <Button variant="outline" size="sm" onClick={() => toggle(u.id)}>
-                <Power className="w-3.5 h-3.5 mr-1" />
-                {u.active ? "Nonaktifkan" : "Aktifkan"}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => toggle(u.id)}>
+                  <Power className="w-3.5 h-3.5 mr-1" />
+                  {u.active ? "Nonaktifkan" : "Aktifkan"}
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => remove(u)} aria-label={`Hapus ${u.store_name}`}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              </div>
             </div>
           </Card>
         ))}
       </div>
     </div>
   );
+}

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useOffline } from "@/context/OfflineContext";
@@ -15,6 +16,7 @@ const adminNav = [
   { to: "/admin/transactions", label: "Transaksi", icon: Receipt },
   { to: "/admin/settlement", label: "Settlement", icon: Landmark },
   { to: "/admin/audit", label: "Audit Log", icon: ScrollText },
+  { to: "/admin/settings", label: "Pengaturan", icon: Settings },
 ];
 
 const umkmNav = [
@@ -30,9 +32,15 @@ const umkmNav = [
 export default function Layout() {
   const { user, logout } = useAuth();
   const { online, forceOffline, toggleForceOffline, pending, syncing, syncNow } = useOffline();
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const nav = useNavigate();
   const isAdmin = user?.role === "admin";
   const items = isAdmin ? adminNav : umkmNav;
+
+  const confirmLogout = async () => {
+    setLogoutOpen(false);
+    await logout();
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF8F5]">
@@ -90,7 +98,7 @@ export default function Layout() {
               {isAdmin ? "Super Admin" : "UMKM"}
             </div>
           </div>
-          <Button data-testid="logout-btn" variant="ghost" size="sm" onClick={logout}>
+          <Button data-testid="logout-btn" variant="ghost" size="sm" onClick={() => setLogoutOpen(true)}>
             <LogOut className="w-4 h-4" />
           </Button>
         </div>
@@ -134,6 +142,23 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {logoutOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-lg">
+            <h2 className="text-lg font-semibold text-[#0C2340]">Konfirmasi Keluar</h2>
+            <p className="mt-2 text-sm text-slate-600">Apakah Anda yakin ingin keluar?</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setLogoutOpen(false)}>
+                Batal
+              </Button>
+              <Button type="button" variant="destructive" onClick={confirmLogout}>
+                Keluar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

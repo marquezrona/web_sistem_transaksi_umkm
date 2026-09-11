@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -50,14 +49,14 @@ export default function Products() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="font-display text-3xl font-extrabold text-[#0C2340]">Produk</h1>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="add-product-btn" onClick={openNew} className="bg-[#0A3663] rounded-full">
-              <Plus className="w-4 h-4 mr-1.5" /> Tambah Produk
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>{editing ? "Edit Produk" : "Tambah Produk"}</DialogTitle></DialogHeader>
+        <>
+          <Button data-testid="add-product-btn" onClick={openNew} className="bg-[#0A3663] rounded-full">
+            <Plus className="w-4 h-4 mr-1.5" /> Tambah Produk
+          </Button>
+          {open && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-5 shadow-lg">
+                <h2 className="text-lg font-semibold text-slate-900">{editing ? "Edit Produk" : "Tambah Produk"}</h2>
             <form onSubmit={save} className="space-y-3">
               <div><Label>Nama</Label><Input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
               <div><Label>Kategori</Label><Input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} /></div>
@@ -66,10 +65,17 @@ export default function Products() {
                 <div><Label>Stok</Label><Input type="number" required value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} /></div>
               </div>
               <div><Label>Deskripsi</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} /></div>
-              <Button type="submit" className="w-full bg-[#0A3663]">Simpan</Button>
+              <div className="flex gap-2 pt-2">
+                <Button type="button" variant="outline" onClick={() => setOpen(false)} className="flex-1">
+                  Kembali
+                </Button>
+                <Button type="submit" className="flex-1 bg-[#0A3663]">Simpan</Button>
+              </div>
             </form>
-          </DialogContent>
-        </Dialog>
+              </div>
+            </div>
+          )}
+        </>
       </div>
 
       <Card className="border-[#E5DEC9] overflow-hidden">

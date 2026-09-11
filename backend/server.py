@@ -25,9 +25,154 @@ from pydantic import BaseModel, Field, EmailStr
 # ------------------------------------------------------------
 # Setup
 # ------------------------------------------------------------
+class MemoryCursor:
+    def __init__(self, docs, projection=None):
+        self.docs = list(docs)
+        self.projection = projection or {}
+
+    def sort(self, key, direction=-1):
+        reverse = direction == -1
+        self.docs = sorted(self.docs, key=lambda d: d.get(key, 0), reverse=reverse)
+        return self
+
+    async def to_list(self, limit=None):
+        items = self.docs if limit is None else self.docs[:limit]
+        return [self._project(doc) for doc in items]
+
+    def _project(self, doc):
+        if not self.projection or self.projection == {"_id": 0}:
+            return {k: v for k, v in doc.items() if k != "_id"}
+        res = {}
+        for k, v in self.projection.items():
+            if v == 0:
+                continue
+            if k == "_id":
+                continue
+            if k in doc:
+                res[k] = doc[k]
+        if not res and self.projection:
+            return {k: v for k, v in doc.items() if k != "_id"}
+        return res
+
+
+class MemoryCollection:
+    def __init__(self, name):
+        self.name = name
+        self.data = []
+
+    def _matches(self, doc, query):
+        if not query:
+            return True
+        for key, expected in query.items():
+            value = doc.get(key)
+            if isinstance(expected, dict):
+                for op, op_value in expected.items():
+                    if op == "$gte" and not (value >= op_value):
+                        return False
+                    if op == "$lt" and not (value < op_value):
+                        return False
+                    if op == "$gt" and not (value > op_value):
+                        return False
+                    if op == "$lte" and not (value <= op_value):
+                        return False
+                    if op == "$in" and value not in op_value:
+                        return False
+                    if op == "$ne" and value == op_value:
+                        return False
+                continue
+            if key == "_id":
+                if value != expected:
+                    return False
+                continue
+            if value != expected:
+                return False
+        return True
+
+    async def create_index(self, *args, **kwargs):
+        return None
+
+    async def find_one(self, query=None, projection=None):
+        query = query or {}
+        for doc in self.data:
+            if self._matches(doc, query):
+                return self._project(doc, projection)
+        return None
+
+    def _project(self, doc, projection=None):
+        projection = projection or {}
+        if not projection:
+            return {k: v for k, v in doc.items() if k != "_id"}
+        res = {}
+        for k, v in projection.items():
+            if v == 0:
+                continue
+            if k == "_id":
+                continue
+            if k in doc:
+                res[k] = doc[k]
+        if not res:
+            return {k: v for k, v in doc.items() if k != "_id"}
+        return res
+
+    def find(self, query=None, projection=None):
+        query = query or {}
+        results = [doc for doc in self.data if self._matches(doc, query)]
+        return MemoryCursor(results, projection)
+
+    async def insert_one(self, doc):
+        if "id" not in doc:
+            import uuid
+            doc = {**doc, "id": str(uuid.uuid4())}
+        self.data.append(doc)
+        return type("Result", (), {"inserted_id": doc.get("id")})()
+
+    async def update_one(self, query, update):
+        for doc in self.data:
+            if self._matches(doc, query):
+                for operator, values in update.items():
+                    if operator == "$set":
+                        doc.update(values)
+                    elif operator == "$inc":
+                        for k, v in values.items():
+                            doc[k] = (doc.get(k, 0) or 0) + v
+                return type("Result", (), {"matched_count": 1, "modified_count": 1})()
+        return type("Result", (), {"matched_count": 0, "modified_count": 0})()
+
+    async def delete_one(self, query):
+        for idx, doc in enumerate(self.data):
+            if self._matches(doc, query):
+                del self.data[idx]
+                return type("Result", (), {"deleted_count": 1})()
+        return type("Result", (), {"deleted_count": 0})()
+
+    async def delete_many(self, query):
+        original = len(self.data)
+        self.data = [doc for doc in self.data if not self._matches(doc, query)]
+        return type("Result", (), {"deleted_count": original - len(self.data)})()
+
+    async def count_documents(self, query=None):
+        query = query or {}
+        return sum(1 for doc in self.data if self._matches(doc, query))
+
+
+class MemoryDatabase:
+    def __init__(self):
+        self.users = MemoryCollection("users")
+        self.umkms = MemoryCollection("umkms")
+        self.products = MemoryCollection("products")
+        self.transactions = MemoryCollection("transactions")
+        self.customers = MemoryCollection("customers")
+        self.audit_logs = MemoryCollection("audit_logs")
+        self.settlement_config = MemoryCollection("settlement_config")
+
+
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+try:
+    client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=2000)
+    db = client[os.environ['DB_NAME']]
+except Exception:
+    client = None
+    db = MemoryDatabase()
 
 JWT_SECRET = os.environ['JWT_SECRET']
 JWT_ALG = "HS256"
@@ -89,6 +234,10 @@ async def get_current_user(creds: Optional[HTTPAuthorizationCredentials] = Depen
     user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
     if not user:
         raise HTTPException(401, "User not found")
+    if user.get("role") == "umkm":
+        umkm = await db.umkms.find_one({"id": user.get("umkm_id")})
+        if not umkm or not umkm.get("active", True):
+            raise HTTPException(401, "Akun UMKM sedang dinonaktifkan")
     return user
 
 
@@ -121,6 +270,11 @@ async def audit(user_id: str, action: str, meta: dict = None, umkm_id: str = Non
 class LoginIn(BaseModel):
     email: EmailStr
     password: str
+
+
+class AdminAccountUpdateIn(BaseModel):
+    email: EmailStr
+    current_password: str
 
 
 class ProductIn(BaseModel):
@@ -236,6 +390,10 @@ async def login(body: LoginIn):
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(401, "Email atau password salah")
+    if user.get("role") == "umkm":
+        umkm = await db.umkms.find_one({"id": user.get("umkm_id")})
+        if not umkm or not umkm.get("active", True):
+            raise HTTPException(401, "Akun UMKM sedang dinonaktifkan")
     token = create_token(user["id"], user["role"], user.get("umkm_id"))
     await audit(user["id"], "login", {"email": email}, user.get("umkm_id"))
     return {
@@ -254,6 +412,20 @@ async def login(body: LoginIn):
 async def logout(user=Depends(get_current_user)):
     await audit(user["id"], "logout", {}, user.get("umkm_id"))
     return {"ok": True}
+
+
+@api.put("/admin/account")
+async def update_admin_account(body: AdminAccountUpdateIn, user=Depends(require_admin)):
+    admin = await db.users.find_one({"id": user["id"]})
+    if not admin or not verify_password(body.current_password, admin["password_hash"]):
+        raise HTTPException(401, "Password saat ini salah")
+    email = body.email.lower()
+    existing = await db.users.find_one({"email": email})
+    if existing and existing.get("id") != user["id"]:
+        raise HTTPException(400, "Email sudah digunakan akun lain")
+    await db.users.update_one({"id": user["id"]}, {"$set": {"email": email}})
+    await audit(user["id"], "admin_email_updated", {"email": email})
+    return {"email": email}
 
 
 @api.get("/auth/me")
@@ -363,6 +535,20 @@ async def toggle_umkm(umkm_id: str, user=Depends(require_admin)):
     await db.umkms.update_one({"id": umkm_id}, {"$set": {"active": new_state}})
     await audit(user["id"], "umkm_toggle", {"umkm_id": umkm_id, "active": new_state})
     return {"ok": True, "active": new_state}
+
+
+@api.delete("/admin/umkms/{umkm_id}")
+async def delete_umkm(umkm_id: str, user=Depends(require_admin)):
+    umkm = await db.umkms.find_one({"id": umkm_id})
+    if not umkm:
+        raise HTTPException(404, "UMKM tidak ditemukan")
+    await db.users.delete_one({"id": umkm.get("owner_user_id")})
+    await db.umkms.delete_one({"id": umkm_id})
+    await db.products.delete_many({"umkm_id": umkm_id})
+    await db.customers.delete_many({"umkm_id": umkm_id})
+    await db.transactions.delete_many({"umkm_id": umkm_id})
+    await audit(user["id"], "umkm_deleted", {"umkm_id": umkm_id, "store_name": umkm.get("store_name")})
+    return {"ok": True}
 
 
 @api.get("/admin/transactions")
@@ -746,6 +932,17 @@ DEMO_CUSTOMERS = [
 
 @app.on_event("startup")
 async def startup():
+    global client, db
+    try:
+        if client is not None:
+            await client.admin.command("ping")
+        else:
+            raise RuntimeError("Mongo not configured")
+    except Exception:
+        log.warning("MongoDB unavailable, using in-memory fallback store for demo mode.")
+        client = None
+        db = MemoryDatabase()
+
     # indexes
     await db.users.create_index("email", unique=True)
     await db.umkms.create_index("id")
@@ -835,7 +1032,8 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
-    client.close()
+    if client is not None:
+        client.close()
 
 
 app.include_router(api)

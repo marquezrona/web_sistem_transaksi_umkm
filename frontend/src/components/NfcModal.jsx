@@ -1,37 +1,69 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { api } from "@/lib/api";
-import { CreditCard, Nfc, Loader2, CheckCircle2 } from "lucide-react";
+import { Nfc, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const rp = (n) => "Rp " + Number(n || 0).toLocaleString("id-ID");
-const DEMO_CARDS = ["CARD-001", "CARD-002", "CARD-003", "CARD-004", "CARD-005"];
-
 export default function NfcModal({ open, onOpenChange, total, onPay }) {
-  const [stage, setStage] = useState("select"); // select | scanning | detected | processing
+  const [stage, setStage] = useState("scanning"); // scanning | detected | processing
   const [card, setCard] = useState(null);
   const [customer, setCustomer] = useState(null);
+  const [readerError, setReaderError] = useState("");
+  const readerRef = useRef(null);
+  const scanAbortRef = useRef(null);
 
   useEffect(() => {
-    if (!open) { setStage("select"); setCard(null); setCustomer(null); }
+    if (!open) {
+      scanAbortRef.current?.abort();
+      setStage("scanning");
+      setCard(null);
+      setCustomer(null);
+      setReaderError("");
+    }
   }, [open]);
 
-  const tap = async (cardId) => {
+  const readCard = async (cardId) => {
     setCard(cardId);
-    setStage("scanning");
-    setTimeout(async () => {
-      try {
-        const { data } = await api.get(`/umkm/customers/by-card/${cardId}`);
-        setCustomer(data);
-        setStage("detected");
-      } catch (err) {
-        toast.error(err.response?.data?.detail || "Kartu tidak dikenal");
-        setStage("select");
-      }
-    }, 900);
+    try {
+      const { data } = await api.get(`/umkm/customers/by-card/${encodeURIComponent(cardId)}`);
+      setCustomer(data);
+      setStage("detected");
+      scanAbortRef.current?.abort();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Kartu tidak dikenal");
+      setStage("scanning");
+    }
   };
+
+  const startScan = async () => {
+    setStage("scanning");
+    setReaderError("");
+    if (!("NDEFReader" in window)) {
+      setReaderError("Perangkat atau browser ini belum mendukung pembacaan NFC otomatis. Gunakan Chrome di Android dengan NFC aktif.");
+      return;
+    }
+    try {
+      const reader = new window.NDEFReader();
+      const controller = new AbortController();
+      readerRef.current = reader;
+      scanAbortRef.current = controller;
+      reader.addEventListener("reading", event => {
+        const cardId = event.serialNumber || event.message?.records?.[0]?.data;
+        if (cardId) readCard(typeof cardId === "string" ? cardId : new TextDecoder().decode(cardId));
+      }, { once: true });
+      await reader.scan({ signal: controller.signal });
+    } catch (err) {
+      if (err.name !== "AbortError") setReaderError(err.message || "NFC tidak dapat diaktifkan.");
+    }
+  };
+
+  useEffect(() => {
+    if (open) startScan();
+    return () => scanAbortRef.current?.abort();
+  }, [open]);
 
   const confirm = async () => {
     setStage("processing");
@@ -42,6 +74,8 @@ export default function NfcModal({ open, onOpenChange, total, onPay }) {
       setStage("detected");
     }
   };
+
+  const cancel = () => onOpenChange(false);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -56,36 +90,21 @@ export default function NfcModal({ open, onOpenChange, total, onPay }) {
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Total</div>
           <div className="font-display text-4xl font-extrabold text-[#0A3663] mb-4">{rp(total)}</div>
 
-          {stage === "select" && (
-            <>
-              <div className="text-sm text-slate-600 mb-4">Pilih kartu demo untuk simulasi tap:</div>
-              <div className="grid grid-cols-2 gap-2">
-                {DEMO_CARDS.map(c => (
-                  <Button
-                    key={c}
-                    data-testid={`demo-card-${c}`}
-                    onClick={() => tap(c)}
-                    variant="outline"
-                    className="h-14 border-[#7E22CE]/30 hover:bg-[#7E22CE]/5 flex flex-col"
-                  >
-                    <CreditCard className="w-4 h-4 mb-0.5 text-[#7E22CE]" />
-                    <span className="text-xs font-mono">{c}</span>
-                  </Button>
-                ))}
-              </div>
-              <div className="mt-4 text-[11px] text-slate-500 italic">
-                Ganti dengan NFC reader fisik di produksi.
-              </div>
-            </>
-          )}
-
           {stage === "scanning" && (
-            <div className="py-8 flex flex-col items-center">
-              <div className="relative w-24 h-24 rounded-full bg-[#7E22CE]/10 flex items-center justify-center nfc-ripple">
-                <Nfc className="w-10 h-10 text-[#7E22CE]" />
+            <>
+              <div className="py-8 flex flex-col items-center">
+                <div className="relative w-24 h-24 rounded-full bg-[#7E22CE]/10 flex items-center justify-center nfc-ripple">
+                  <Nfc className="w-10 h-10 text-[#7E22CE]" />
+                </div>
+                <div className="mt-6 font-semibold text-[#7E22CE]">Tempelkan kartu ke alat NFC</div>
+                <div className="mt-2 text-sm text-slate-500">Pembacaan kartu akan dilakukan otomatis.</div>
+                {readerError && <div className="mt-4 max-w-sm rounded bg-red-50 p-3 text-xs text-red-700">{readerError}</div>}
+                {!readerError && <div className="mt-4 text-xs text-slate-500">Menunggu kartu...</div>}
               </div>
-              <div className="mt-6 font-semibold text-[#7E22CE]">Membaca kartu {card}...</div>
-            </div>
+              <Button type="button" variant="outline" onClick={cancel} className="w-full mt-4">
+                Kembali
+              </Button>
+            </>
           )}
 
           {stage === "detected" && customer && (
@@ -95,6 +114,9 @@ export default function NfcModal({ open, onOpenChange, total, onPay }) {
               <div className="font-mono text-sm text-slate-600">{customer.nfc_card_masked}</div>
               <div className="mt-3 flex justify-between">
                 <div>
+                <Button type="button" variant="outline" onClick={cancel} className="mt-5">
+                  Batal
+                </Button>
                   <div className="text-xs text-slate-500">Saldo sebelum</div>
                   <div className="font-semibold">{rp(customer.balance)}</div>
                 </div>
@@ -113,6 +135,9 @@ export default function NfcModal({ open, onOpenChange, total, onPay }) {
                 className="w-full mt-4 bg-[#7E22CE] hover:bg-[#6B21A8]"
               >
                 Konfirmasi Pembayaran
+              </Button>
+              <Button type="button" variant="outline" onClick={cancel} className="w-full mt-2">
+                Kembali
               </Button>
             </Card>
           )}

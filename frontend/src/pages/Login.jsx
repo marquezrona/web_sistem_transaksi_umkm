@@ -6,12 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Store, Waves } from "lucide-react";
+import { Eye, EyeOff, Store, Waves } from "lucide-react";
 
 export default function Login() {
   const { user, login, loading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   if (user) return <Navigate to={user.role === "admin" ? "/admin" : "/umkm"} replace />;
 
@@ -69,12 +70,24 @@ export default function Login() {
             </div>
             <div>
               <Label>Password</Label>
-              <Input
-                data-testid="login-password"
-                type="password" value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••" required
-              />
+              <div className="relative">
+                <Input
+                  data-testid="login-password"
+                  type={showPassword ? "text" : "password"} value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••" required className="pr-11"
+                />
+                <button
+                  type="button"
+                  data-testid="toggle-password-visibility"
+                  aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                  title={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                  onClick={() => setShowPassword(value => !value)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-[#0A3663]"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
             <Button
               data-testid="login-submit"

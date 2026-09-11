@@ -89,6 +89,15 @@ export default function QrisModal({ open, onOpenChange, total, onPay }) {
             {stage === "processing" ? "Memproses..." : "Simulasikan Pembayaran Berhasil"}
           </Button>
 
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="w-full mt-2"
+          >
+            Kembali
+          </Button>
+
           <div className="mt-3 text-[11px] text-slate-500 italic">
             Simulasi QRIS — integrasikan provider QRIS resmi untuk mode produksi.
           </div>
