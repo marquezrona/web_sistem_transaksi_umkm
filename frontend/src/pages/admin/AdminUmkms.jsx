@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Power, Store, Trash2 } from "lucide-react";
+import { Eye, Plus, Power, Store, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const rp = (n) => "Rp " + Number(n || 0).toLocaleString("id-ID");
@@ -97,6 +98,9 @@ export default function AdminUmkms() {
                 <div className="font-display font-bold text-[#0A3663]">{rp(u.balance)}</div>
               </div>
               <div className="flex gap-2">
+                <Link to={`/admin/umkms/${u.id}/products`} className="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-3 text-xs font-medium transition-colors hover:bg-slate-50">
+                  <Eye className="w-3.5 h-3.5 mr-1" /> Produk
+                </Link>
                 <Button variant="outline" size="sm" onClick={() => toggle(u.id)}>
                   <Power className="w-3.5 h-3.5 mr-1" />
                   {u.active ? "Nonaktifkan" : "Aktifkan"}

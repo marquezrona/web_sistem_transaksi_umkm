@@ -1,18 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useOffline } from "@/context/OfflineContext";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   LayoutDashboard, ShoppingCart, Package, Users, Receipt, BarChart3,
   Settings, LogOut, Wifi, WifiOff, Building2, Landmark, ScrollText,
-  RefreshCw, Radio, Store
+  RefreshCw, Radio, Store, ClipboardCheck, MoreHorizontal
 } from "lucide-react";
 
 const adminNav = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, end: true },
   { to: "/admin/umkms", label: "UMKM", icon: Building2 },
+  { to: "/admin/product-approvals", label: "Persetujuan Produk", icon: ClipboardCheck },
   { to: "/admin/transactions", label: "Transaksi", icon: Receipt },
   { to: "/admin/settlement", label: "Settlement", icon: Landmark },
   { to: "/admin/audit", label: "Audit Log", icon: ScrollText },
@@ -33,9 +35,37 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const { online, forceOffline, toggleForceOffline, pending, syncing, syncNow } = useOffline();
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [pendingProducts, setPendingProducts] = useState(0);
+  const [storeLogo, setStoreLogo] = useState(null);
+  const [moreOpen, setMoreOpen] = useState(false);
   const nav = useNavigate();
   const isAdmin = user?.role === "admin";
   const items = isAdmin ? adminNav : umkmNav;
+  const mobileItems = isAdmin ? adminNav.slice(0, 4) : umkmNav.slice(0, 4);
+  const extraMobileItems = isAdmin ? adminNav.slice(4) : umkmNav.slice(4);
+
+  useEffect(() => {
+    if (!isAdmin) return undefined;
+    const loadPendingProducts = async () => {
+      try {
+        const { data } = await api.get("/admin/products?status=PENDING");
+        setPendingProducts(data.length);
+      } catch {
+        setPendingProducts(0);
+      }
+    };
+    loadPendingProducts();
+    const timer = window.setInterval(loadPendingProducts, 30000);
+    return () => window.clearInterval(timer);
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (!user || isAdmin) return undefined;
+    const updateLogo = event => setStoreLogo(event.detail || null);
+    api.get("/umkm/settings").then(({ data }) => setStoreLogo(data.logo || null)).catch(() => setStoreLogo(null));
+    window.addEventListener("store-logo-updated", updateLogo);
+    return () => window.removeEventListener("store-logo-updated", updateLogo);
+  }, [isAdmin, user]);
 
   const confirmLogout = async () => {
     setLogoutOpen(false);
@@ -48,8 +78,8 @@ export default function Layout() {
       {/* top bar */}
       <header className="h-16 bg-white border-b border-[#E5DEC9] flex items-center px-4 sm:px-6 gap-4 sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#0A3663] flex items-center justify-center">
-            <Store className="w-5 h-5 text-[#E6A100]" />
+          <div className="w-10 h-10 overflow-hidden rounded-xl bg-[#0A3663] flex items-center justify-center">
+            {storeLogo ? <img src={storeLogo} alt="Logo toko" className="h-full w-full object-cover" /> : <Store className="w-5 h-5 text-[#E6A100]" />}
           </div>
           <div>
             <div className="font-display font-bold text-[#0C2340] leading-tight">Kasir UMKM</div>
@@ -125,7 +155,12 @@ export default function Layout() {
                   }
                 >
                   <Ic className="w-4 h-4" />
-                  {it.label}
+                  <span className="flex-1">{it.label}</span>
+                  {it.to === "/admin/product-approvals" && pendingProducts > 0 && (
+                    <Badge className="min-w-6 justify-center border-red-200 bg-red-100 px-1.5 text-red-700">
+                      {pendingProducts > 99 ? "99+" : pendingProducts}
+                    </Badge>
+                  )}
                 </NavLink>
               );
             })}
@@ -133,7 +168,7 @@ export default function Layout() {
         </aside>
 
         {/* content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+        <main className="flex-1 p-3 pb-24 sm:p-6 sm:pb-6 lg:p-8 overflow-x-hidden">
           {forceOffline && (
             <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm">
               <strong>Mode Offline Aktif.</strong> Transaksi akan disimpan lokal dan disinkronkan saat koneksi kembali.
@@ -142,6 +177,58 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {moreOpen && (
+        <>
+          <button type="button" aria-label="Tutup menu lainnya" className="fixed inset-0 z-40 bg-black/20 md:hidden" onClick={() => setMoreOpen(false)} />
+          <div className="fixed inset-x-3 bottom-[4.75rem] z-50 rounded-2xl border border-[#E5DEC9] bg-white p-2 shadow-xl md:hidden">
+            {extraMobileItems.map(item => {
+              const Ic = item.icon;
+              return (
+                <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setMoreOpen(false)} className={({ isActive }) => `flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold ${isActive ? "bg-[#0A3663] text-white" : "text-[#0C2340] hover:bg-[#F7F4EF]"}`}>
+                  <Ic className="h-5 w-5" />
+                  <span className="flex-1">{item.label}</span>
+                  {item.to === "/admin/product-approvals" && pendingProducts > 0 && <Badge className="border-red-200 bg-red-100 text-red-700">{pendingProducts > 99 ? "99+" : pendingProducts}</Badge>}
+                </NavLink>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-[#E5DEC9] bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_16px_rgba(12,35,64,0.08)] backdrop-blur md:hidden" aria-label="Navigasi mobile">
+        <div className="mx-auto grid h-16 max-w-md grid-cols-5">
+          {mobileItems.map(item => {
+            const Ic = item.icon;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) => `relative flex min-w-0 flex-col items-center justify-center gap-1 px-1 text-[10px] font-semibold ${isActive ? "text-[#0A3663]" : "text-slate-500"}`}
+              >
+                {({ isActive }) => (
+                  <>
+                    <span className={`flex h-7 w-10 items-center justify-center rounded-xl ${isActive ? "bg-[#0A3663]/10" : ""}`}>
+                      <Ic className="h-5 w-5" />
+                    </span>
+                    <span className="max-w-full truncate">{item.label}</span>
+                    {item.to === "/admin/product-approvals" && pendingProducts > 0 && (
+                      <span className="absolute right-2 top-1 h-4 min-w-4 rounded-full bg-red-600 px-1 text-center text-[9px] leading-4 text-white">
+                        {pendingProducts > 99 ? "99+" : pendingProducts}
+                      </span>
+                    )}
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
+          <button type="button" onClick={() => setMoreOpen(open => !open)} className={`relative flex min-w-0 flex-col items-center justify-center gap-1 px-1 text-[10px] font-semibold ${moreOpen ? "text-[#0A3663]" : "text-slate-500"}`}>
+            <span className={`flex h-7 w-10 items-center justify-center rounded-xl ${moreOpen ? "bg-[#0A3663]/10" : ""}`}><MoreHorizontal className="h-5 w-5" /></span>
+            <span>Lainnya</span>
+          </button>
+        </div>
+      </nav>
 
       {logoutOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

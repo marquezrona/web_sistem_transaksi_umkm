@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Plus, Minus, Trash2, ShoppingBag, Nfc, QrCode, Package } from "lucide-react";
+import { Search, Plus, Minus, Trash2, ShoppingBag, Nfc, QrCode, Package, X } from "lucide-react";
 import NfcModal from "@/components/NfcModal";
 import QrisModal from "@/components/QrisModal";
 import Receipt from "@/components/Receipt";
@@ -27,7 +27,7 @@ export default function Pos() {
 
   const load = async () => {
     try {
-      const { data } = await api.get("/umkm/products");
+      const { data } = await api.get("/umkm/products?approved_only=true");
       setProducts(data);
       await cacheProducts(data);
     } catch {
@@ -41,7 +41,7 @@ export default function Pos() {
   const filtered = useMemo(() =>
     products.filter(p =>
       (cat === "all" || p.category === cat) &&
-      (q === "" || p.name.toLowerCase().includes(q.toLowerCase()))
+      (q.trim() === "" || p.name.toLowerCase().includes(q.trim().toLowerCase()) || (p.category || "").toLowerCase().includes(q.trim().toLowerCase()))
     ), [products, cat, q]);
 
   const addToCart = (p) => {
@@ -114,10 +114,22 @@ export default function Pos() {
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <Input
               data-testid="product-search"
-              placeholder="Cari produk..." value={q}
+              aria-label="Cari produk atau kategori"
+              placeholder="Cari nama produk atau kategori..." value={q}
               onChange={e => setQ(e.target.value)}
-              className="pl-9"
+              className="pl-9 pr-10"
             />
+            {q && (
+              <button
+                type="button"
+                aria-label="Hapus pencarian produk"
+                title="Hapus pencarian"
+                onClick={() => setQ("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-[#0A3663]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
         <div className="flex gap-2 overflow-x-auto pb-3 mb-4">

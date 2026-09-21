@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 const rp = (n) => "Rp " + Number(n || 0).toLocaleString("id-ID");
@@ -16,9 +16,37 @@ export default function Customers() {
   const [form, setForm] = useState(empty);
   const [editing, setEditing] = useState(null);
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [groupBy, setGroupBy] = useState("day");
 
   const load = async () => { const { data } = await api.get("/umkm/customers"); setRows(data); };
   useEffect(() => { load(); }, []);
+
+  const filteredRows = rows.filter(customer => {
+    const value = query.trim().toLowerCase();
+    return !value || [customer.name, customer.phone, customer.nfc_card_id, customer.nfc_card_masked]
+      .some(field => String(field || "").toLowerCase().includes(value));
+  });
+
+  const groupedRows = useMemo(() => {
+    const groups = new Map();
+    filteredRows.forEach(customer => {
+      const date = new Date(customer.created_at);
+      const validDate = !Number.isNaN(date.getTime());
+      const key = !validDate ? "unknown" : groupBy === "day"
+        ? date.toISOString().slice(0, 10)
+        : groupBy === "month" ? date.toISOString().slice(0, 7) : date.toISOString().slice(0, 4);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(customer);
+    });
+    return [...groups.entries()].sort(([first], [second]) => second.localeCompare(first)).map(([key, customers]) => ({
+      key,
+      label: key === "unknown" ? "Tanggal tidak tersedia" : groupBy === "year" ? key : new Intl.DateTimeFormat("id-ID", groupBy === "day"
+        ? { day: "numeric", month: "long", year: "numeric" }
+        : { month: "long", year: "numeric" }).format(new Date(`${key}${groupBy === "day" ? "T12:00:00" : "-01T12:00:00"}`)),
+      customers,
+    }));
+  }, [filteredRows, groupBy]);
 
   const openNew = () => { setForm(empty); setEditing(null); setOpen(true); };
   const openEdit = (c) => { setForm({ name: c.name, phone: c.phone || "", nfc_card_id: c.nfc_card_id || "", balance: c.balance || 0 }); setEditing(c.id); setOpen(true); };
@@ -68,6 +96,32 @@ export default function Customers() {
         </>
       </div>
 
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Input
+          data-testid="customer-search"
+          aria-label="Cari pelanggan"
+          placeholder="Cari nama, telepon, atau kartu NFC..."
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          className="pl-9 pr-10"
+        />
+        {query && (
+          <button type="button" aria-label="Hapus pencarian pelanggan" title="Hapus pencarian" onClick={() => setQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-[#0A3663]">
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold text-slate-600">Kelompokkan:</span>
+        <div className="flex rounded-lg border border-[#E5DEC9] bg-white p-1">
+          <button type="button" onClick={() => setGroupBy("day")} className={`rounded-md px-3 py-1.5 text-sm font-semibold ${groupBy === "day" ? "bg-[#0A3663] text-white" : "text-[#0C2340]"}`}>Per Hari</button>
+          <button type="button" onClick={() => setGroupBy("month")} className={`rounded-md px-3 py-1.5 text-sm font-semibold ${groupBy === "month" ? "bg-[#0A3663] text-white" : "text-[#0C2340]"}`}>Per Bulan</button>
+          <button type="button" onClick={() => setGroupBy("year")} className={`rounded-md px-3 py-1.5 text-sm font-semibold ${groupBy === "year" ? "bg-[#0A3663] text-white" : "text-[#0C2340]"}`}>Per Tahun</button>
+        </div>
+      </div>
+
       <Card className="border-[#E5DEC9] overflow-hidden">
         <Table>
           <TableHeader>
@@ -80,18 +134,26 @@ export default function Customers() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map(c => (
-              <TableRow key={c.id}>
-                <TableCell className="font-semibold">{c.name}</TableCell>
-                <TableCell>{c.phone}</TableCell>
-                <TableCell className="font-mono text-xs">{c.nfc_card_masked || c.nfc_card_id || "-"}</TableCell>
-                <TableCell className="text-right font-mono">{rp(c.balance)}</TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="icon" onClick={() => openEdit(c)}><Pencil className="w-4 h-4" /></Button>
-                  <Button variant="ghost" size="icon" onClick={() => del(c.id)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
-                </TableCell>
-              </TableRow>
+            {groupedRows.map(group => (
+              <Fragment key={group.key}>
+                <TableRow className="bg-[#F7F4EF]"><TableCell colSpan="5" className="font-display font-bold text-[#0C2340]">{group.label} <span className="font-normal text-slate-500">({group.customers.length} pelanggan)</span></TableCell></TableRow>
+                {group.customers.map(c => (
+                  <TableRow key={c.id}>
+                    <TableCell className="font-semibold">{c.name}</TableCell>
+                    <TableCell>{c.phone}</TableCell>
+                    <TableCell className="font-mono text-xs">{c.nfc_card_masked || c.nfc_card_id || "-"}</TableCell>
+                    <TableCell className="text-right font-mono">{rp(c.balance)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(c)}><Pencil className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => del(c.id)}><Trash2 className="w-4 h-4 text-red-600" /></Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </Fragment>
             ))}
+            {filteredRows.length === 0 && (
+              <TableRow><TableCell colSpan="5" className="py-10 text-center text-slate-500">Tidak ada pelanggan yang cocok dengan pencarian.</TableCell></TableRow>
+            )}
           </TableBody>
         </Table>
       </Card>

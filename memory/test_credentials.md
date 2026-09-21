@@ -1,7 +1,7 @@
 # Test Credentials - Kasir UMKM Sabu Raijua
 
 ## Super Admin
-- Email: `e44253346@student.polije.ac.id`
+- Email: `admin@umkm.id`
 - Password: `admin123`
 - Role: `admin`
 - Access: Super Admin Dashboard (semua UMKM, transaksi, settlement, audit log)

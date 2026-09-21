@@ -286,6 +286,11 @@ class ProductIn(BaseModel):
     image: Optional[str] = None
 
 
+class ProductDecisionIn(BaseModel):
+    status: str
+    approval_note: Optional[str] = ""
+
+
 class CustomerIn(BaseModel):
     name: str
     phone: Optional[str] = ""
@@ -495,6 +500,53 @@ async def list_umkms(user=Depends(require_admin)):
     return await db.umkms.find({}, {"_id": 0}).to_list(1000)
 
 
+@api.get("/admin/products")
+async def admin_products(status: Optional[str] = None, user=Depends(require_admin)):
+    query = {}
+    if status in {"PENDING", "APPROVED", "REJECTED"}:
+        query["approval_status"] = status
+    products = await db.products.find(query, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    umkms = await db.umkms.find({}, {"_id": 0}).to_list(1000)
+    stores = {u["id"]: u for u in umkms}
+    for product in products:
+        store = stores.get(product.get("umkm_id"), {})
+        product["store_name"] = store.get("store_name", "UMKM tidak ditemukan")
+    return products
+
+
+@api.get("/admin/umkms/{umkm_id}/products")
+async def admin_umkm_products(umkm_id: str, user=Depends(require_admin)):
+    umkm = await db.umkms.find_one({"id": umkm_id}, {"_id": 0})
+    if not umkm:
+        raise HTTPException(404, "UMKM tidak ditemukan")
+    products = await db.products.find({"umkm_id": umkm_id}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    return {"umkm": umkm, "products": products}
+
+
+@api.patch("/admin/products/{pid}/decision")
+async def decide_product(pid: str, body: ProductDecisionIn, user=Depends(require_admin)):
+    if body.status not in {"APPROVED", "REJECTED"}:
+        raise HTTPException(400, "Status persetujuan tidak valid")
+    product = await db.products.find_one({"id": pid}, {"_id": 0})
+    if not product:
+        raise HTTPException(404, "Produk tidak ditemukan")
+    await db.products.update_one(
+        {"id": pid},
+        {"$set": {
+            "approval_status": body.status,
+            "approval_note": body.approval_note or "",
+            "approved_at": now_iso(),
+            "approved_by": user["id"],
+        }},
+    )
+    await audit(user["id"], "product_approval", {
+        "product_id": pid,
+        "umkm_id": product.get("umkm_id"),
+        "status": body.status,
+    })
+    return {"ok": True, "status": body.status}
+
+
 @api.post("/admin/umkms")
 async def create_umkm(body: UmkmCreateIn, user=Depends(require_admin)):
     existing = await db.users.find_one({"email": body.email.lower()})
@@ -563,9 +615,10 @@ async def get_settlement(user=Depends(require_admin)):
     if not cfg:
         cfg = {"id": "default", "umkm_pct": 90, "pemkab_pct": 8, "admin_pct": 2}
         await db.settlement_config.insert_one(cfg)
-    total_in = 0.0
-    async for t in db.transactions.find({"status": "PAID"}, {"_id": 0, "total": 1}):
-        total_in += t["total"]
+    paid_transactions = await db.transactions.find(
+        {"status": "PAID"}, {"_id": 0, "total": 1}
+    ).to_list(10000)
+    total_in = sum(t.get("total", 0) for t in paid_transactions)
     return {
         "config": {"umkm_pct": cfg["umkm_pct"], "pemkab_pct": cfg["pemkab_pct"], "admin_pct": cfg["admin_pct"]},
         "total_in": total_in,
@@ -644,15 +697,27 @@ async def umkm_dashboard(user=Depends(require_umkm)):
 
 
 @api.get("/umkm/products")
-async def list_products(user=Depends(require_umkm)):
-    return await db.products.find({"umkm_id": user["umkm_id"]}, {"_id": 0}).to_list(1000)
+async def list_products(approved_only: bool = False, user=Depends(require_umkm)):
+    products = await db.products.find({"umkm_id": user["umkm_id"]}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    for product in products:
+        product.setdefault("approval_status", "APPROVED")
+    if approved_only:
+        products = [p for p in products if p["approval_status"] == "APPROVED"]
+    return products
 
 
 @api.post("/umkm/products")
 async def create_product(body: ProductIn, user=Depends(require_umkm)):
-    p = {"id": str(uuid.uuid4()), "umkm_id": user["umkm_id"], **body.dict(), "created_at": now_iso()}
+    p = {
+        "id": str(uuid.uuid4()),
+        "umkm_id": user["umkm_id"],
+        **body.dict(),
+        "approval_status": "PENDING",
+        "approval_note": "",
+        "created_at": now_iso(),
+    }
     await db.products.insert_one(p)
-    await audit(user["id"], "product_create", {"product_id": p["id"], "name": p["name"]}, user["umkm_id"])
+    await audit(user["id"], "product_create_pending", {"product_id": p["id"], "name": p["name"]}, user["umkm_id"])
     return p
 
 

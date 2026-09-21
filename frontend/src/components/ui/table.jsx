@@ -1,5 +1,5 @@
 export function Table({ children, className = '', ...props }) {
-  return <table {...props} className={`w-full border-collapse text-left ${className}`}>{children}</table>;
+  return <div className="w-full overflow-x-auto"><table {...props} className={`min-w-[640px] w-full border-collapse text-left ${className}`}>{children}</table></div>;
 }
 export function TableHeader({ children, ...props }) { return <thead {...props}>{children}</thead>; }
 export function TableBody({ children, ...props }) { return <tbody {...props}>{children}</tbody>; }

@@ -104,11 +104,11 @@ export default function Login() {
               <button
                 type="button"
                 data-testid="demo-admin"
-                onClick={() => quickFill("e44253346@student.polije.ac.id", "admin123")}
+                onClick={() => quickFill("admin@umkm.id", "admin123")}
                 className="w-full text-left text-xs bg-[#0A3663]/5 hover:bg-[#0A3663]/10 px-3 py-2 rounded-md flex justify-between"
               >
                 <span className="font-semibold">Super Admin</span>
-                <span className="text-slate-500">e44253346@student.polije.ac.id</span>
+                <span className="text-slate-500">admin@umkm.id</span>
               </button>
               <button
                 type="button"

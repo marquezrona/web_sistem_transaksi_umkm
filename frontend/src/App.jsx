@@ -7,6 +7,8 @@ import Layout from "@/components/Layout";
 import Login from "@/pages/Login";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminUmkms from "@/pages/admin/AdminUmkms";
+import AdminUmkmProducts from "@/pages/admin/AdminUmkmProducts";
+import AdminProductApprovals from "@/pages/admin/AdminProductApprovals";
 import AdminTransactions from "@/pages/admin/AdminTransactions";
 import AdminSettlement from "@/pages/admin/AdminSettlement";
 import AdminAuditLog from "@/pages/admin/AdminAuditLog";
@@ -32,6 +34,8 @@ function App() {
             <Route path="/admin" element={<ProtectedRoute role="admin"><Layout /></ProtectedRoute>}>
               <Route index element={<AdminDashboard />} />
               <Route path="umkms" element={<AdminUmkms />} />
+              <Route path="umkms/:umkmId/products" element={<AdminUmkmProducts />} />
+              <Route path="product-approvals" element={<AdminProductApprovals />} />
               <Route path="transactions" element={<AdminTransactions />} />
               <Route path="settlement" element={<AdminSettlement />} />
               <Route path="audit" element={<AdminAuditLog />} />
