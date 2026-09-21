@@ -26,7 +26,7 @@ export default function Transactions() {
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || "http://localhost:8001";
     const url = backendUrl.replace(/^http/, "ws") + `/api/ws?token=${token}`;
     let ws;
     try {
