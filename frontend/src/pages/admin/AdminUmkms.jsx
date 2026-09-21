@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Plus, Power, Store, Trash2 } from "lucide-react";
+import { Eye, Plus, Power, Search, Store, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const rp = (n) => "Rp " + Number(n || 0).toLocaleString("id-ID");
 
 export default function AdminUmkms() {
   const [umkms, setUmkms] = useState([]);
+  const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ store_name: "", email: "", password: "", address: "", phone: "" });
 
@@ -49,6 +50,13 @@ export default function AdminUmkms() {
     } catch (err) { toast.error(err.response?.data?.detail || "Gagal menghapus UMKM"); }
   };
 
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredUmkms = umkms.filter((umkm) => {
+    if (!normalizedQuery) return true;
+    return [umkm.store_name, umkm.email, umkm.address, umkm.phone]
+      .some(value => String(value || "").toLowerCase().includes(normalizedQuery));
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -76,8 +84,19 @@ export default function AdminUmkms() {
         )}
       </div>
 
+      <div className="relative max-w-xl">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Input
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Cari nama toko, email, alamat, atau telepon..."
+          aria-label="Cari UMKM"
+          className="pl-9"
+        />
+      </div>
+
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {umkms.map(u => (
+        {filteredUmkms.map(u => (
           <Card key={u.id} className="p-5 border-[#E5DEC9]">
             <div className="flex items-start gap-3">
               <div className="w-12 h-12 rounded-xl bg-[#0A3663] flex items-center justify-center">
@@ -113,6 +132,11 @@ export default function AdminUmkms() {
           </Card>
         ))}
       </div>
+      {filteredUmkms.length === 0 && (
+        <div className="rounded-lg border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
+          Tidak ada UMKM yang cocok dengan pencarian.
+        </div>
+      )}
     </div>
   );
 }
